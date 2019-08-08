@@ -30,7 +30,7 @@ class PDNN:
         self.clear_logs = not(self.restore)
         self.is_test = True
         self.pretrain = False
-        self.show_gradients = False
+        self.show_gradients = True
 
         self.model_name = 'PD2D'
 
@@ -507,31 +507,41 @@ class PDNN:
 
                 pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
 
-                delta = tf.nn.relu(pre_delta) + 1.0
+                # delta = tf.nn.relu(pre_delta) + 1.0
+                delta = 3*tf.nn.sigmoid(pre_delta) + 1.0
 
             with tf.variable_scope('Parameters'):
 
                 conv3 = tf.layers.conv2d(coded_unet, filters=32, kernel_size=3, strides=2, padding='valid')
-                conv3 = tf.layers.batch_normalization(conv3, training=training)
+                if self.batch_norm:
+                    conv3 = tf.layers.batch_normalization(conv3, training=training)
                 conv4 = tf.layers.conv2d(conv3, filters=16, kernel_size=3, strides=2, padding='valid')
-                conv4 = tf.layers.batch_normalization(conv4, training=training)
+                if self.batch_norm:
+                    conv4 = tf.layers.batch_normalization(conv4, training=training)
                 conv5 = tf.layers.conv2d(conv4, filters=1, kernel_size=3, strides=2, padding='valid')
-                conv5 = tf.layers.batch_normalization(conv5, training=training)
+                if self.batch_norm:
+                    conv5 = tf.layers.batch_normalization(conv5, training=training)
 
                 fc = tf.reshape(conv5,shape=[self.batch_size,-1])
                 fc = tf.layers.dense(fc,512,activation=tf.nn.relu)
-                fc = tf.layers.batch_normalization(fc,training=training)
+                if self.batch_norm:
+                    fc = tf.layers.batch_normalization(fc,training=training)
                 fc = tf.layers.dense(fc,256,activation=tf.nn.relu)
-                fc = tf.layers.batch_normalization(fc,training=training)
+                if self.batch_norm:
+                    fc = tf.layers.batch_normalization(fc,training=training)
                 fc = tf.layers.dense(fc,64,activation=tf.nn.relu)
-                fc = tf.layers.batch_normalization(fc,training=training)
+                if self.batch_norm:
+                    fc = tf.layers.batch_normalization(fc,training=training)
                 par = tf.layers.dense(fc,2,activation=None)
 
 
             with tf.variable_scope("PD"):
 
-                lda = 0.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                alpha = 0.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
+                # lda = 0.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
+                # alpha = 0.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
+
+                lda = tf.nn.relu(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
+                alpha = tf.nn.relu(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
 
                 f = u
 
@@ -539,8 +549,8 @@ class PDNN:
 
                 self.batch_size = self.batch_size_org
 
-                if self.pretrain:
-                    u = tf.nn.relu(pre_delta)
+            if self.pretrain:
+                u = tf.nn.relu(pre_delta)
 
             return u, td, tp, lda, alpha, delta, sigma, f
 
@@ -573,12 +583,12 @@ class PDNN:
         with tf.variable_scope('Regularization'):
             TV2D = tf.reduce_mean(self.TV2D(delta))
 
-        with tf.name_scope('Bayesian_Weights'):
-            s1 = tf.Variable(tf.sqrt(0.5),name='s1')
-            s2 = tf.Variable(0.1,name='s2')
-
-            c1 = tf.div(1.,2.*(tf.square(s1)),name='c1')
-            c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
+        # with tf.name_scope('Bayesian_Weights'):
+        #     s1 = tf.Variable(tf.sqrt(0.5),name='s1')
+        #     s2 = tf.Variable(0.1,name='s2')
+        #
+        #     c1 = tf.div(1.,2.*(tf.square(s1)),name='c1')
+        #     c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
 
 
         loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
@@ -591,10 +601,10 @@ class PDNN:
 
         test_loss = 1.-dice_coe(output=u_test,target=test_gt)
 
-        global_step = tf.Variable(0, trainable=False)
+        global_step = tf.Variable(0, trainable=False, name='global_step')
 
-        # var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+        var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        # var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
 
         optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=self.show_gradients)
 
@@ -616,9 +626,9 @@ class PDNN:
         random_slice = tf.placeholder(dtype=tf.int32)
 
         with tf.name_scope('Training'):
-            with tf.name_scope('Bayesian_weights'):
-                tf.summary.scalar('c1',c1)
-                # tf.summary.scalar('c2',c2)
+            # with tf.name_scope('Bayesian_weights'):
+            #     tf.summary.scalar('c1',c1)
+            #     # tf.summary.scalar('c2',c2)
 
             with tf.name_scope('Metrics'):
                 tf.summary.scalar('Dice_coe',dice_coe_t)
@@ -714,8 +724,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                if not((counter % (self.epoch_iteration))==0):
-                # if not((counter % (50))==0):
+                # if not((counter % (self.epoch_iteration))==0):
+                if not((counter % (50))==0):
                     ti, tm = next(data_train)
 
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
