@@ -778,6 +778,10 @@ class PDNN:
                             dice_test_list.append(dice_coe_test_value)
                             iou_test_list.append(iou_coe_test_value)
 
+                        plt.bar(np.arange(len(dice_test_list)), np.asarray(dice_test_list, dtype=np.float32))
+                        plt.title('Test DICE Avg: ' + str(np.mean(dice_test_list)))
+                        plt.savefig('test.png', bbox_inches='tight')
+
                         summary_str_test, global_step_value = sess.run([summary_test, global_step],feed_dict={dice_test: np.mean(dice_test_list), iou_test: np.mean(iou_test_list)})
                         summary_writer_test.add_run_metadata(run_metadata, 'step%d' % epocas)
                         summary_writer_test.add_summary(summary_str_test, global_step_value)
