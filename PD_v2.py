@@ -16,7 +16,7 @@ from tqdm import tqdm
 from optimizer_opt import optimizer_opt
 from metrics import dice_coe, iou_coe
 from PD_algorithm import PD
-from u_net import unet
+from u_net import unet, real_unet
 from ResNet_module import res_conv
 from get_data_list import get_data_list
 import random
@@ -29,10 +29,10 @@ class PDNN:
         self.restore = False
         self.clear_logs = not(self.restore)
         self.is_test = True
-        self.pretrain = False
-        self.show_gradients = True
+        self.pre_train = False
+        self.show_gradients = False
 
-        self.model_name = 'PD2D'
+        self.model_name = 'PD2D_realunet'
 
         self.checkpoint = self.globalpath + 'Models/Model_' + self.model_name + '/model.ckpt'
         self.data_dir = self.globalpath + 'Data2D/'
@@ -505,16 +505,17 @@ class PDNN:
             with tf.variable_scope("ResNet"):
 
 
-                pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
+                # pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
+                pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training)
 
                 delta = tf.nn.relu(pre_delta) + 1.0
 
             with tf.variable_scope('Parameters'):
 
-                conv3 = tf.layers.conv2d(coded_unet, filters=32, kernel_size=3, strides=2, padding='valid')
+                conv3 = tf.layers.conv2d(coded_unet, filters=64, kernel_size=3, strides=2, padding='valid')
                 if self.batch_norm:
                     conv3 = tf.layers.batch_normalization(conv3, training=training)
-                conv4 = tf.layers.conv2d(conv3, filters=16, kernel_size=3, strides=2, padding='valid')
+                conv4 = tf.layers.conv2d(conv3, filters=64, kernel_size=3, strides=2, padding='valid')
                 if self.batch_norm:
                     conv4 = tf.layers.batch_normalization(conv4, training=training)
                 conv5 = tf.layers.conv2d(conv4, filters=1, kernel_size=3, strides=2, padding='valid')
@@ -538,16 +539,13 @@ class PDNN:
                 lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
                 alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
 
-                # lda = tf.nn.relu(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                # alpha = tf.nn.relu(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
-
                 f = u
 
                 u, td, tp, sigma = PD(self, NitOut=4, NitIn=[40,20,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
 
                 self.batch_size = self.batch_size_org
 
-            if self.pretrain:
+            if self.pre_train:
                 u = tf.nn.relu(pre_delta)
 
             return u, td, tp, lda, alpha, delta, sigma, f
@@ -593,6 +591,7 @@ class PDNN:
         U2 = tf.reduce_mean(tf.square(delta))
         # train_loss =  c1*tf.reduce_mean(1.-dice_coe(output=u_train,target=train_gt_da)) + s1 + 0.001*U2
         train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
+        # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da, loss_type='sorensen')
         # train_loss = loss_l2
 
         validation_loss = 1.-dice_coe(output=u_validation,target=validation_gt)
@@ -602,13 +601,11 @@ class PDNN:
         global_step = tf.Variable(0, trainable=False, name='global_step')
 
         var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        # var_list = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
 
         optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=self.show_gradients)
 
 
         saver = tf.train.Saver(var_list=var_list)
-        # saver = tf.train.Saver()
 
         with tf.name_scope('All_Metrics'):
             dice_coe_t = dice_coe(output=u_train,target=train_gt_da)
@@ -722,8 +719,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                if not((counter % (self.epoch_iteration))==0):
-                # if not((counter % (50))==0):
+                # if not((counter % (self.epoch_iteration))==0):
+                if not((counter % (50))==0):
                     ti, tm = next(data_train)
 
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
@@ -744,6 +741,9 @@ class PDNN:
                 if (counter % self.epoch_iteration)==0 and not(counter==0):
                     epocas = epocas + 1
                     saver.save(sess, self.checkpoint)
+                    if self.pre_train:
+                        counter = 0
+                        epocas = 0
                     np.save('counter.npy',counter)
                     np.save('epocas.npy',epocas)
 
