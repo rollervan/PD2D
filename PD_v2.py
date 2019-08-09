@@ -507,8 +507,7 @@ class PDNN:
 
                 pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
 
-                # delta = tf.nn.relu(pre_delta) + 1.0
-                delta = 3*tf.nn.sigmoid(pre_delta) + 1.0
+                delta = tf.nn.relu(pre_delta) + 1.0
 
             with tf.variable_scope('Parameters'):
 
@@ -530,18 +529,17 @@ class PDNN:
                 if self.batch_norm:
                     fc = tf.layers.batch_normalization(fc,training=training)
                 fc = tf.layers.dense(fc,64,activation=tf.nn.relu)
-                if self.batch_norm:
-                    fc = tf.layers.batch_normalization(fc,training=training)
+
                 par = tf.layers.dense(fc,2,activation=None)
 
 
             with tf.variable_scope("PD"):
 
-                # lda = 0.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                # alpha = 0.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
+                lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
+                alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
 
-                lda = tf.nn.relu(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                alpha = tf.nn.relu(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
+                # lda = tf.nn.relu(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
+                # alpha = tf.nn.relu(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
 
                 f = u
 
@@ -724,8 +722,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                # if not((counter % (self.epoch_iteration))==0):
-                if not((counter % (50))==0):
+                if not((counter % (self.epoch_iteration))==0):
+                # if not((counter % (50))==0):
                     ti, tm = next(data_train)
 
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})

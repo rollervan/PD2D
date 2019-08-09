@@ -5,6 +5,8 @@ def unet(self,inputs,kernel_size,padding, training=False):
     with tf.name_scope('UNet'):
         if self.batch_norm:
             preactivation = tf.layers.batch_normalization(inputs,training=training)
+        else:
+            preactivation = inputs
         # Down
         res1 = tf.layers.conv2d(preactivation, filters=32, kernel_size=kernel_size, strides=2, padding=padding,activation=tf.nn.relu)
         if self.batch_norm:
@@ -34,8 +36,7 @@ def unet(self,inputs,kernel_size,padding, training=False):
         res1_up = tf.concat([res1,res1_up],axis=-1)
 
         recon = tf.layers.conv2d(res1_up,filters=16, kernel_size=3,strides=1,padding=padding,activation=tf.nn.relu)
-        if self.batch_norm:
-            recon = tf.layers.batch_normalization(recon,training=training)
+
         recon = tf.image.resize(recon, [self.IM_ROWS, self.IM_COLS])
 
         recon = tf.layers.conv2d(recon,filters=1, kernel_size=3,strides=1,padding=padding,activation=None)
