@@ -8,19 +8,22 @@ def unet(self,inputs,kernel_size,padding, training=False):
         else:
             preactivation = inputs
         # Down
-        res1 = tf.layers.conv2d(preactivation, filters=32, kernel_size=kernel_size, strides=2, padding=padding,activation=tf.nn.relu)
+        res1 = tf.layers.conv2d(preactivation, filters=32, kernel_size=kernel_size, strides=1, padding=padding,activation=tf.nn.relu)
         if self.batch_norm:
             res1 = tf.layers.batch_normalization(res1,training=training)
+        res1 = tf.layers.max_pooling2d(res1, pool_size=2, strides=2, padding=padding)
 
 
-        res2 = tf.layers.conv2d(res1, filters=64, kernel_size=kernel_size, strides=2, padding=padding,activation=tf.nn.relu)
+        res2 = tf.layers.conv2d(res1, filters=64, kernel_size=kernel_size, strides=1, padding=padding,activation=tf.nn.relu)
         if self.batch_norm:
             res2 = tf.layers.batch_normalization(res2,training=training)
+        res2 = tf.layers.max_pooling2d(res2, pool_size=2, strides=2, padding=padding)
 
 
-        res3 = tf.layers.conv2d(res2, filters=128, kernel_size=kernel_size, strides=2, padding=padding,activation=tf.nn.relu)
+        res3 = tf.layers.conv2d(res2, filters=128, kernel_size=kernel_size, strides=1, padding=padding,activation=tf.nn.relu)
         if self.batch_norm:
             res3 = tf.layers.batch_normalization(res3,training=training)
+        res3 = tf.layers.max_pooling2d(res3, pool_size=2, strides=2, padding=padding)
 
         # Up
         res2_up = tf.layers.conv2d(res3, filters=64, kernel_size=kernel_size, strides=1, padding=padding,activation=tf.nn.relu)
@@ -60,7 +63,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res1 = tf.layers.batch_normalization(res1, training=training)
-        res1 = tf.layers.max_pooling2d(res1, pool_size=2, strides=1, padding=padding)
+        res1 = tf.layers.max_pooling2d(res1, pool_size=2, strides=2, padding=padding)
 
         #####################
 
@@ -72,7 +75,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res2 = tf.layers.batch_normalization(res2, training=training)
-        res2 = tf.layers.max_pooling2d(res2, pool_size=2, strides=1, padding=padding)
+        res2 = tf.layers.max_pooling2d(res2, pool_size=2, strides=2, padding=padding)
 
         #####################
 
@@ -84,7 +87,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res3 = tf.layers.batch_normalization(res3, training=training)
-        res3 = tf.layers.max_pooling2d(res3, pool_size=2, strides=1, padding=padding)
+        res3 = tf.layers.max_pooling2d(res3, pool_size=2, strides=2, padding=padding)
 
         #####################
 
@@ -96,7 +99,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res4 = tf.layers.batch_normalization(res4, training=training)
-        res4 = tf.layers.max_pooling2d(res4, pool_size=2, strides=1, padding=padding)
+        res4 = tf.layers.max_pooling2d(res4, pool_size=2, strides=2, padding=padding)
 
         #####################
 
@@ -114,7 +117,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
             res5 = tf.layers.batch_normalization(res5, training=training)
 
         # Up
-        res4_up = tf.layers.conv2d_transpose(res3, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4_up = tf.layers.conv2d(res5, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res4_up = tf.layers.batch_normalization(res4_up, training=training)
@@ -130,7 +133,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res3_up = tf.layers.conv2d_transpose(res4_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res3_up = tf.layers.conv2d_transpose(res4_up, filters=int(64*scale), kernel_size=kernel_size, strides=2, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res3_up = tf.layers.batch_normalization(res3_up, training=training)
@@ -147,7 +150,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res2_up = tf.layers.conv2d_transpose(res3_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res2_up = tf.layers.conv2d_transpose(res3_up, filters=int(64*scale), kernel_size=kernel_size, strides=2, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res2_up = tf.layers.batch_normalization(res2_up, training=training)
@@ -164,7 +167,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res1_up = tf.layers.conv2d_transpose(res2_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res1_up = tf.layers.conv2d_transpose(res2_up, filters=int(64*scale), kernel_size=kernel_size, strides=2, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res1_up = tf.layers.batch_normalization(res1_up, training=training)
