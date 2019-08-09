@@ -67,11 +67,11 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res2 = tf.layers.conv2d(res1, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res2 = tf.layers.conv2d(res1, filters=int(128*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res2 = tf.layers.batch_normalization(res2, training=training)
-        res2 = tf.layers.conv2d(res2, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res2 = tf.layers.conv2d(res2, filters=int(128*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res2 = tf.layers.batch_normalization(res2, training=training)
@@ -79,11 +79,11 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res3 = tf.layers.conv2d(res2, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res3 = tf.layers.conv2d(res2, filters=int(256*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res3 = tf.layers.batch_normalization(res3, training=training)
-        res3 = tf.layers.conv2d(res3, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res3 = tf.layers.conv2d(res3, filters=int(128*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res3 = tf.layers.batch_normalization(res3, training=training)
@@ -91,11 +91,11 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res4 = tf.layers.conv2d(res3, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4 = tf.layers.conv2d(res3, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res4 = tf.layers.batch_normalization(res4, training=training)
-        res4 = tf.layers.conv2d(res4, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4 = tf.layers.conv2d(res4, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res4 = tf.layers.batch_normalization(res4, training=training)
@@ -103,64 +103,64 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         #####################
 
-        res5 = tf.layers.conv2d(res4, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res5 = tf.layers.conv2d(res4, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res5 = tf.layers.batch_normalization(res5, training=training)
-        res5 = tf.layers.conv2d(res5, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res5 = tf.layers.conv2d(res5, filters=int(1024*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res5 = tf.layers.batch_normalization(res5, training=training)
-        res5 = tf.layers.conv2d(res5, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res5 = tf.layers.conv2d(res5, filters=int(1024*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
         if self.batch_norm:
             res5 = tf.layers.batch_normalization(res5, training=training)
 
         # Up
-        res4_up = tf.layers.conv2d(res5, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4_up = tf.layers.conv2d(res5, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res4_up = tf.layers.batch_normalization(res4_up, training=training)
         res4_up = tf.concat([res4, res4_up], axis=-1)
-        res4_up = tf.layers.conv2d(res4_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4_up = tf.layers.conv2d(res4_up, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res4_up = tf.layers.batch_normalization(res4_up, training=training)
-        res4_up = tf.layers.conv2d(res4_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res4_up = tf.layers.conv2d(res4_up, filters=int(512*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res4_up = tf.layers.batch_normalization(res4_up, training=training)
 
         #####################
 
-        res3_up = tf.layers.conv2d_transpose(res4_up, filters=int(64*scale), kernel_size=kernel_size, strides=2, padding=padding,
+        res3_up = tf.layers.conv2d_transpose(res4_up, filters=int(256*scale), kernel_size=kernel_size, strides=2, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res3_up = tf.layers.batch_normalization(res3_up, training=training)
 
         res3_up = tf.concat([res3, res3_up], axis=-1)
-        res3_up = tf.layers.conv2d(res3_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res3_up = tf.layers.conv2d(res3_up, filters=int(256*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res3_up = tf.layers.batch_normalization(res3_up, training=training)
-        res3_up = tf.layers.conv2d(res3_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res3_up = tf.layers.conv2d(res3_up, filters=int(256*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res3_up = tf.layers.batch_normalization(res3_up, training=training)
 
         #####################
 
-        res2_up = tf.layers.conv2d_transpose(res3_up, filters=int(64*scale), kernel_size=kernel_size, strides=2, padding=padding,
+        res2_up = tf.layers.conv2d_transpose(res3_up, filters=int(128*scale), kernel_size=kernel_size, strides=2, padding=padding,
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res2_up = tf.layers.batch_normalization(res2_up, training=training)
 
         res2_up = tf.concat([res2, res2_up], axis=-1)
-        res2_up = tf.layers.conv2d(res2_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res2_up = tf.layers.conv2d(res2_up, filters=int(128*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res2_up = tf.layers.batch_normalization(res2_up, training=training)
-        res2_up = tf.layers.conv2d(res2_up, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
+        res2_up = tf.layers.conv2d(res2_up, filters=int(128*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
         if self.batch_norm:
             res2_up = tf.layers.batch_normalization(res2_up, training=training)

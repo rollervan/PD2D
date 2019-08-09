@@ -542,6 +542,8 @@ class PDNN:
                 f = u
 
                 u, td, tp, sigma = PD(self, NitOut=4, NitIn=[40,20,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
+                # u, td, tp, sigma = PD(self, NitOut=4, NitIn=[10,10,10,10], u=u, delta=delta, alpha=alpha, lda=lda)
+                # u, td, tp, sigma = PD(self, NitOut=10, NitIn=[30,25,20,15,10,10,10,10,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
 
                 self.batch_size = self.batch_size_org
 
@@ -605,7 +607,7 @@ class PDNN:
         optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=self.show_gradients)
 
 
-        saver = tf.train.Saver(var_list=var_list)
+        saver = tf.train.Saver(var_list=tf.global_variables())
 
         with tf.name_scope('All_Metrics'):
             dice_coe_t = dice_coe(output=u_train,target=train_gt_da)
@@ -719,8 +721,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                # if not((counter % (self.epoch_iteration))==0):
-                if not((counter % (50))==0):
+                if not((counter % (self.epoch_iteration))==0):
+                # if not((counter % (50))==0):
                     ti, tm = next(data_train)
 
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
@@ -741,9 +743,7 @@ class PDNN:
                 if (counter % self.epoch_iteration)==0 and not(counter==0):
                     epocas = epocas + 1
                     saver.save(sess, self.checkpoint)
-                    if self.pre_train:
-                        counter = 0
-                        epocas = 0
+
                     np.save('counter.npy',counter)
                     np.save('epocas.npy',epocas)
 
@@ -778,7 +778,7 @@ class PDNN:
 
                                 # vol_value.append(slice_value[0][0,:,:,:])
                                 # vol_gt.append(test_m[0,:,:,:])
-
+                            vol_value = vol_value >= 0.5
                             vol_value = np.reshape(vol_value,[self.IM_ROWS,self.IM_COLS,155])
                             vol_gt = np.reshape(vol_gt,[self.IM_ROWS,self.IM_COLS,155])
                             dice_coe_test_value = self.np_dice(vol_value,vol_gt)
@@ -844,6 +844,7 @@ class PDNN:
                         vol_value = np.concatenate([vol_value, slice_value], axis=-1)
                         vol_gt = np.concatenate([vol_gt, test_m], axis=-1)
 
+                vol_value = vol_value>=0.5
                 vol_value = np.reshape(vol_value, [self.IM_ROWS, self.IM_COLS, 155])
                 vol_gt = np.reshape(vol_gt, [self.IM_ROWS, self.IM_COLS, 155])
                 dice_coe_test_value = self.np_dice(vol_value, vol_gt)
