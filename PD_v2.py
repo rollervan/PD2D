@@ -16,7 +16,7 @@ from tqdm import tqdm
 from optimizer_opt import optimizer_opt
 from metrics import dice_coe, iou_coe
 from PD_algorithm import PD
-from u_net import unet, real_unet
+from u_net import *
 from ResNet_module import res_conv
 from get_data_list import get_data_list
 import random
@@ -30,7 +30,7 @@ class PDNN:
         self.clear_logs = not(self.restore)
         self.is_test = True
         self.pre_train = False
-        self.show_gradients = False
+        self.show_gradients = True
 
         self.model_name = 'PD2D_realunet'
 
@@ -507,8 +507,9 @@ class PDNN:
 
                 # pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
                 pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training)
-
-                delta = tf.nn.relu(pre_delta) + 1.0
+                # pre_delta, coded_unet = net(self, inputs=u, kernel_size=3, padding='same', training=training)
+                # pre_delta, coded_unet = res_conv(self, x=u, is_training=training)
+                delta = tf.nn.relu(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
 
             with tf.variable_scope('Parameters'):
 
@@ -541,6 +542,7 @@ class PDNN:
 
                 f = u
 
+
                 u, td, tp, sigma = PD(self, NitOut=4, NitIn=[40,20,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
                 # u, td, tp, sigma = PD(self, NitOut=4, NitIn=[10,10,10,10], u=u, delta=delta, alpha=alpha, lda=lda)
                 # u, td, tp, sigma = PD(self, NitOut=10, NitIn=[30,25,20,15,10,10,10,10,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
@@ -548,7 +550,7 @@ class PDNN:
                 self.batch_size = self.batch_size_org
 
             if self.pre_train:
-                u = tf.nn.relu(pre_delta)
+                u =pre_delta
 
             return u, td, tp, lda, alpha, delta, sigma, f
 
@@ -589,25 +591,45 @@ class PDNN:
         #     c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
 
 
-        loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
         U2 = tf.reduce_mean(tf.square(delta))
         # train_loss =  c1*tf.reduce_mean(1.-dice_coe(output=u_train,target=train_gt_da)) + s1 + 0.001*U2
-        train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
-        # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da, loss_type='sorensen')
-        # train_loss = loss_l2
+        if self.pre_train:
+            train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=u_train)
+            u_train = tf.cast(1-tf.expand_dims(tf.argmax(u_train,axis=-1),-1),tf.float32)
+            validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=u_validation)
+            u_validation = tf.expand_dims(1-tf.cast(tf.argmax(u_validation,axis=-1),tf.float32),-1)
+            # u_train = tf.expand_dims(u_train[:,:,:,0],axis=-1)
+            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
+            # u_validation = tf.expand_dims(u_validation[:,:,:,0],axis=-1)
+            # validation_loss =  1.-dice_coe(output=u_validation,target=validation_gt)
 
-        validation_loss = 1.-dice_coe(output=u_validation,target=validation_gt)
+        else:
+            # train_loss =  tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
+            # validation_loss =  tf.losses.mean_squared_error(labels=validation_gt,predictions=u_validation)
+            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
+            # validation_loss =  1.-dice_coe(output=u_validation,target=validation_gt)
+
+
+            train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1))
+            validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1))
+            # loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
+            # u_train = 1-tf.expand_dims(u_train[:,:,:,0],axis=-1)
+            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
+            # # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da, loss_type='sorensen')
+            # # train_loss = loss_l2
+            # u_validation = 1-tf.expand_dims(u_validation[:,:,:,0],axis=-1)
+            # validation_loss = 1.-dice_coe(output=u_validation,target=validation_gt)
 
         test_loss = 1.-dice_coe(output=u_test,target=test_gt)
 
         global_step = tf.Variable(0, trainable=False, name='global_step')
 
         var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        saver = tf.train.Saver(var_list=tf.global_variables())
 
         optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=self.show_gradients)
 
 
-        saver = tf.train.Saver(var_list=tf.global_variables())
 
         with tf.name_scope('All_Metrics'):
             dice_coe_t = dice_coe(output=u_train,target=train_gt_da)
@@ -724,7 +746,6 @@ class PDNN:
                 if not((counter % (self.epoch_iteration))==0):
                 # if not((counter % (50))==0):
                     ti, tm = next(data_train)
-
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
                 else:
 
@@ -768,7 +789,8 @@ class PDNN:
 
                                 slice_value = sess.run([u_test],
                                     feed_dict={test_images: test_i, test_gt: test_m}, options=run_options, run_metadata=run_metadata)
-
+                                if self.pre_train:
+                                    slice_value = np.expand_dims(np.argmax(slice_value[0],axis=-1),-1)
                                 if test_iter == 0:
                                     vol_value = slice_value
                                     vol_gt = test_m
