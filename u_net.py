@@ -50,10 +50,13 @@ def unet(self,inputs,kernel_size,padding, training=False):
 
 def real_unet(self, inputs, kernel_size, padding, training=False):
     with tf.name_scope('UNet'):
-
         scale = 1
 
+
+        # preactivation = tf.image.resize(inputs, [120,120])
         preactivation = inputs
+        pre_coded_inpunt = preactivation
+
         # Down
         res1 = tf.layers.conv2d(preactivation, filters=int(64*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                 activation=tf.nn.relu)
@@ -137,7 +140,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
                                              activation=tf.nn.relu)
         if self.batch_norm:
             res3_up = tf.layers.batch_normalization(res3_up, training=training)
-
+        # res3_up = res3_up[:,0:15,0:15,:]
         res3_up = tf.concat([res3, res3_up], axis=-1)
         res3_up = tf.layers.conv2d(res3_up, filters=int(256*scale), kernel_size=kernel_size, strides=1, padding=padding,
                                    activation=tf.nn.relu)
@@ -188,7 +191,7 @@ def real_unet(self, inputs, kernel_size, padding, training=False):
 
         recon = tf.image.resize(recon, [self.IM_ROWS, self.IM_COLS])
 
-    return recon, res5
+    return recon, pre_coded_inpunt
 
 
 def net(self,inputs,kernel_size,padding, training=False):

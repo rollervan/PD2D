@@ -32,7 +32,7 @@ class PDNN:
         self.pre_train = False
         self.show_gradients = True
 
-        self.model_name = 'PD2D_realunet'
+        self.model_name = 'PD2D'
 
         self.checkpoint = self.globalpath + 'Models/Model_' + self.model_name + '/model.ckpt'
         self.data_dir = self.globalpath + 'Data2D/'
@@ -42,6 +42,7 @@ class PDNN:
         self.IM_COLS = 240
         self.IM_DEPTH = 1
 
+        self.tv_loss = 1e-3
         self.batch_norm = True
         self.eps = 1e-5
         self.learning_rate = 1e-5
@@ -509,29 +510,32 @@ class PDNN:
                 pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training)
                 # pre_delta, coded_unet = net(self, inputs=u, kernel_size=3, padding='same', training=training)
                 # pre_delta, coded_unet = res_conv(self, x=u, is_training=training)
+
                 delta = tf.nn.relu(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
+                # delta = 3*tf.nn.sigmoid(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
 
             with tf.variable_scope('Parameters'):
 
-                conv3 = tf.layers.conv2d(coded_unet, filters=64, kernel_size=3, strides=2, padding='valid')
-                if self.batch_norm:
-                    conv3 = tf.layers.batch_normalization(conv3, training=training)
-                conv4 = tf.layers.conv2d(conv3, filters=64, kernel_size=3, strides=2, padding='valid')
-                if self.batch_norm:
-                    conv4 = tf.layers.batch_normalization(conv4, training=training)
-                conv5 = tf.layers.conv2d(conv4, filters=1, kernel_size=3, strides=2, padding='valid')
-                if self.batch_norm:
-                    conv5 = tf.layers.batch_normalization(conv5, training=training)
+                # conv3 = tf.layers.conv2d(coded_unet, filters=64, kernel_size=3, strides=1, padding='valid')
+                # if self.batch_norm:
+                #     conv3 = tf.layers.batch_normalization(conv3, training=training)
+                # conv3 = tf.layers.max_pooling2d(conv3,pool_size=2,strides=2)
+                # conv4 = tf.layers.conv2d(conv3, filters=64, kernel_size=3, strides=1, padding='valid')
+                # if self.batch_norm:
+                #     conv4 = tf.layers.batch_normalization(conv4, training=training)
+                # conv4 = tf.layers.max_pooling2d(conv4,pool_size=2,strides=2)
+                # conv5 = tf.layers.conv2d(conv4, filters=64, kernel_size=3, strides=1, padding='valid')
+                # if self.batch_norm:
+                #     conv5 = tf.layers.batch_normalization(conv5, training=training)
+                # conv5 = tf.layers.max_pooling2d(conv5,pool_size=2,strides=2)
 
-                fc = tf.reshape(conv5,shape=[self.batch_size,-1])
+                fc = tf.reshape(coded_unet,shape=[self.batch_size,-1])
+                fc = tf.layers.dense(fc,1024,activation=tf.nn.relu)
+                if self.batch_norm:
+                    fc = tf.layers.batch_normalization(fc,training=training)
                 fc = tf.layers.dense(fc,512,activation=tf.nn.relu)
                 if self.batch_norm:
                     fc = tf.layers.batch_normalization(fc,training=training)
-                fc = tf.layers.dense(fc,256,activation=tf.nn.relu)
-                if self.batch_norm:
-                    fc = tf.layers.batch_normalization(fc,training=training)
-                fc = tf.layers.dense(fc,64,activation=tf.nn.relu)
-
                 par = tf.layers.dense(fc,2,activation=None)
 
 
@@ -539,6 +543,8 @@ class PDNN:
 
                 lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
                 alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
+                # lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
+                # alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
 
                 f = u
 
@@ -591,12 +597,13 @@ class PDNN:
         #     c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
 
 
-        U2 = tf.reduce_mean(tf.square(delta))
-        # train_loss =  c1*tf.reduce_mean(1.-dice_coe(output=u_train,target=train_gt_da)) + s1 + 0.001*U2
+
         if self.pre_train:
-            train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=u_train)
+            # train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=u_train)
+            train_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1)))
             u_train = tf.cast(1-tf.expand_dims(tf.argmax(u_train,axis=-1),-1),tf.float32)
-            validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=u_validation)
+            # validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=u_validation)
+            validation_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1)))
             u_validation = tf.expand_dims(1-tf.cast(tf.argmax(u_validation,axis=-1),tf.float32),-1)
             # u_train = tf.expand_dims(u_train[:,:,:,0],axis=-1)
             # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
@@ -610,8 +617,15 @@ class PDNN:
             # validation_loss =  1.-dice_coe(output=u_validation,target=validation_gt)
 
 
-            train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1))
-            validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1))
+            # train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1))
+            # validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1))
+
+            train_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1)))
+            validation_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1)))
+        # U2 = tf.reduce_mean(tf.square(delta))
+        # train_loss += self.tv_loss*U2
+
+
             # loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
             # u_train = 1-tf.expand_dims(u_train[:,:,:,0],axis=-1)
             # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
@@ -743,8 +757,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                if not((counter % (self.epoch_iteration))==0):
-                # if not((counter % (50))==0):
+                # if not((counter % (self.epoch_iteration))==0):
+                if not((counter % (50))==0):
                     ti, tm = next(data_train)
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
                 else:
@@ -858,7 +872,8 @@ class PDNN:
 
                     slice_value = sess.run([u_test],
                                            feed_dict={test_images: test_i, test_gt: test_m})
-
+                    if self.pre_train:
+                        slice_value = 1-np.expand_dims(np.argmax(slice_value[0], axis=-1), -1)
                     if test_iter == 0:
                         vol_value = slice_value
                         vol_gt = test_m

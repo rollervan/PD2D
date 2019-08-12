@@ -141,6 +141,7 @@ def classification_loss(logit, label) :
 
 def res_conv(self, x, is_training=True, reuse=False):
 
+    res_mid = x
     self.res_n = 18
     with tf.variable_scope("network", reuse=reuse):
 
@@ -185,9 +186,17 @@ def res_conv(self, x, is_training=True, reuse=False):
 
         x = batch_norm(x, is_training, scope='batch_norm')
         x = relu(x)
-        res_mid = x
-        x = global_avg_pooling(x)
-        x = fully_conneted(x, units=2*self.IM_ROWS*self.IM_COLS, scope='logit')
+
+        ########################################################################################################
+        x = tf.layers.conv2d_transpose(x,128,kernel_size=3,strides=2,padding='same')
+        x = batch_norm(x, is_training, scope='batch_norm1')
+
+        x = tf.layers.conv2d_transpose(x,64,kernel_size=3,strides=2,padding='same')
+        x = batch_norm(x, is_training, scope='batch_norm2')
+
+        x = tf.layers.conv2d_transpose(x,2,kernel_size=3,strides=2,padding='same')
+        # x = global_avg_pooling(x)
+        # x = fully_conneted(x, units=2*self.IM_ROWS*self.IM_COLS, scope='logit')
 
         x = tf.reshape(x,shape=[self.batch_size,self.IM_ROWS,self.IM_COLS,2])
 
