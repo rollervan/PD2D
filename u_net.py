@@ -48,8 +48,8 @@ def unet(self,inputs,kernel_size,padding, training=False):
     return recon, res3
 
 
-def real_unet(self, inputs, kernel_size, padding, training=False):
-    with tf.name_scope('UNet'):
+def real_unet(self, inputs, kernel_size, padding, training=False, reuse=False):
+    with tf.variable_scope('UNet', reuse=reuse):
         scale = 1
 
 

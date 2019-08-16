@@ -42,7 +42,7 @@ class PDNN:
         self.IM_COLS = 240
         self.IM_DEPTH = 1
 
-        self.tv_loss = 1e-3
+        self.tv_loss = 1e-5
         self.batch_norm = True
         self.eps = 1e-5
         self.learning_rate = 1e-5
@@ -507,14 +507,14 @@ class PDNN:
 
 
                 # pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
-                pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training)
+                pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training, reuse=reuse)
                 # pre_delta, coded_unet = net(self, inputs=u, kernel_size=3, padding='same', training=training)
                 # pre_delta, coded_unet = res_conv(self, x=u, is_training=training)
 
                 delta = tf.nn.relu(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
                 # delta = 3*tf.nn.sigmoid(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
 
-            with tf.variable_scope('Parameters'):
+            with tf.variable_scope('Parameters', reuse=reuse):
 
                 # conv3 = tf.layers.conv2d(coded_unet, filters=64, kernel_size=3, strides=1, padding='valid')
                 # if self.batch_norm:
@@ -539,7 +539,7 @@ class PDNN:
                 par = tf.layers.dense(fc,2,activation=None)
 
 
-            with tf.variable_scope("PD"):
+            with tf.variable_scope("PD", reuse=reuse):
 
                 lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
                 alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
@@ -622,7 +622,7 @@ class PDNN:
 
             train_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1)))
             validation_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1)))
-        # U2 = tf.reduce_mean(tf.square(delta))
+        U2 = tf.reduce_mean(tf.pow(tf.square(delta),2.0))
         # train_loss += self.tv_loss*U2
 
 
@@ -682,8 +682,11 @@ class PDNN:
 
             with tf.name_scope('Losses'):
                 tf.summary.scalar('Loss',train_loss)
-                # tf.summary.scalar('TV2D_Reg',TV2D)
+                tf.summary.scalar('TV2D_Reg',TV2D)
                 # tf.summary.scalar('U2_Reg',U2)
+            with tf.name_scope('Bounds'):
+                tf.summary.scalar('Max_Delta', tf.reduce_max(delta))
+                tf.summary.scalar('Min_Delta', tf.reduce_min(delta))
 
             with tf.name_scope('Parameters'):
                 tf.summary.scalar('tp', tp)
@@ -757,8 +760,8 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                # if not((counter % (self.epoch_iteration))==0):
-                if not((counter % (50))==0):
+                if not((counter % (self.epoch_iteration))==0):
+                # if not((counter % (50))==0):
                     ti, tm = next(data_train)
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
                 else:
