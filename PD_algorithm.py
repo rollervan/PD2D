@@ -4,13 +4,11 @@ import numpy as np
 def PD(self, NitOut, NitIn, u, delta, alpha, lda):
     # ones = tf.ones([self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH], dtype=tf.float32, name="ones")
     #
-    # td = tf.clip_by_value(tf.Variable(0.3, dtype=tf.float32, name="td"), 0.05, 1.0)
-    # tp = tf.clip_by_value(tf.Variable(0.3, dtype=tf.float32, name="tp"), 0.05, 1.0)
+    # td = tf.clip_by_value(tf.Variable(0.3, dtype=tf.float32, name="td"), 0.2, 0.4)
+    # tp = tf.clip_by_value(tf.Variable(0.3, dtype=tf.float32, name="tp"), 0.2, 0.4)
     td = .3
     tp = .3
-    # sigma = tf.clip_by_value(tf.Variable(1.0, dtype=tf.float32, name="tp"), 0.05, 2.0)
     sigma = 1.0
-
     # lda =  tf.clip_by_value( tf.reshape(par[:,0],[self.batch_size,1,1,1]),0.1,2.0)
     # alpha = tf.clip_by_value(tf.reshape(par[:,1],[self.batch_size,1,1,1]),0.5,1.5)
 
@@ -95,7 +93,7 @@ def PD(self, NitOut, NitIn, u, delta, alpha, lda):
                                     u_ = 2 * u - u_prev
 
 
-    return u, td, tp, sigma
+    return u, td, tp
 
 # def PD(self, NitOut, NitIn, u, delta, alpha, lda):
 #     # ones = tf.ones([self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH], dtype=tf.float32, name="ones")

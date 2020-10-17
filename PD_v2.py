@@ -1,26 +1,16 @@
 # coding=utf-8
 import tensorflow as tf
 import numpy as np
-import time
-from random import randint
-import matplotlib.pyplot as plt
-# import cv2
+
 import os, shutil, re
 import scipy.stats as st
-import math
-# import sklearn as sk
-import scipy.io as sio
-import scipy.ndimage.interpolation
 from random import shuffle
 from tqdm import tqdm
 from optimizer_opt import optimizer_opt
 from metrics import dice_coe, iou_coe
 from PD_algorithm import PD
-from u_net import *
 from ResNet_module import res_conv
-from get_data_list import get_data_list
-import random
-from medpy.io import load
+
 
 class PDNN:
     def __init__(self):
@@ -28,22 +18,19 @@ class PDNN:
 
         self.restore = False
         self.clear_logs = not(self.restore)
-        self.is_test = True
-        self.pre_train = False
-        self.show_gradients = True
+        self.is_test = False
 
         self.model_name = 'PD2D'
 
         self.checkpoint = self.globalpath + 'Models/Model_' + self.model_name + '/model.ckpt'
         self.data_dir = self.globalpath + 'Data2D/'
+        # self.data_dir = '/home/ivan/TF/BRATS2015/BRATS2015_Training/HGG/'
         self.log_dir = self.globalpath + 'logs/' + self.model_name
 
         self.IM_ROWS = 240
         self.IM_COLS = 240
         self.IM_DEPTH = 1
 
-        self.tv_loss = 1e-5
-        self.batch_norm = True
         self.eps = 1e-5
         self.learning_rate = 1e-5
         self.batch_size = 8
@@ -51,7 +38,7 @@ class PDNN:
         self.num_samples = 27280
         self.num_test_samples = 6820
         self.epoch_iteration = np.round( self.num_samples/(self.batch_size)).astype(int)
-        self.test_each_epoch = 10
+        self.test_each_epoch = 1
 
         # Print stuff
         print('batch_size',self.batch_size)
@@ -311,7 +298,7 @@ class PDNN:
         file_indices = 'indexes2D.npy'
 
         if os.path.isfile(file_indices):
-            [t_f, v_f] = np.load(file_indices,allow_pickle=True)
+            [t_f, v_f] = np.load(file_indices)
             print('Random list of samples LOADED')
 
         else:
@@ -498,80 +485,72 @@ class PDNN:
 
     def relu_plus(self,z):
         return tf.maximum(1.0,z)
-    def PD_v2(self, u, reuse, training=False, batch_size= 1 ):
-        self.batch_size_org = self.batch_size
-        self.batch_size = batch_size
+    def PD_v2(self, u, reuse=None, training=False):
         with tf.variable_scope("Variational_Network", reuse=reuse):
 
             with tf.variable_scope("ResNet"):
+                conv1 = res_conv(u,filters=16,kernel_size=3,strides=2,padding='same')
+                conv2 = res_conv(conv1,filters=32,kernel_size=3,strides=2,padding='same')
+                conv3 = res_conv(conv2,filters=64,kernel_size=3,strides=2,padding='same')
 
+                # convt1 = tf.layers.conv2d_transpose(conv3,64,3, strides=2, padding='same', activation=tf.nn.relu)
+                # convt2 = tf.layers.conv2d_transpose(convt1,32,3, strides=2, padding='same', activation=tf.nn.relu)
+                # convt3 = tf.layers.conv2d_transpose(convt2,1,3, strides=2, padding='same', activation=tf.sigmoid)
 
-                # pre_delta, coded_unet = unet(self, inputs=u, kernel_size=3, padding='same', training=training)
-                pre_delta, coded_unet = real_unet(self, inputs=u, kernel_size=3, padding='same', training=training, reuse=reuse)
-                # pre_delta, coded_unet = net(self, inputs=u, kernel_size=3, padding='same', training=training)
-                # pre_delta, coded_unet = res_conv(self, x=u, is_training=training)
+                # convt1 = tf.layers.conv2d_transpose(conv3,64,3, strides=2, padding='same', activation=tf.nn.relu)
+                # convt2 = tf.layers.conv2d_transpose(convt1,32,3, strides=2, padding='same', activation=tf.nn.relu)
+                # convt3 = tf.sigmoid(conv3)
+                conv3 = res_conv(conv3,64,kernel_size=3,strides=2,padding='same')
+                convt3 = tf.image.resize(conv3,size=[self.IM_ROWS/4,self.IM_ROWS/4])
+                convt3 = res_conv(convt3,32,kernel_size=3,strides=2,padding='same')
+                convt3 = tf.image.resize(convt3,size=[self.IM_ROWS/2,self.IM_ROWS/2])
+                convt3 = res_conv(convt3,1,kernel_size=3,strides=2,padding='same')
+                # convt3 = tf.sigmoid(convt3)
+                convt3 = tf.image.resize(convt3,size=[self.IM_ROWS,self.IM_ROWS])
 
-                delta = tf.nn.relu(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
-                # delta = 3*tf.nn.sigmoid(tf.expand_dims(pre_delta[:,:,:,0],-1)) + 1.0
+                # delta = convt3
+                delta = convt3 + 1.0
+                # delta = 1.0/(0.9*convt3 + 0.1)
+                th = 1.0/delta
 
-            with tf.variable_scope('Parameters', reuse=reuse):
+                # delta = convt3[:,:,:,1:79,:]
 
-                # conv3 = tf.layers.conv2d(coded_unet, filters=64, kernel_size=3, strides=1, padding='valid')
-                # if self.batch_norm:
-                #     conv3 = tf.layers.batch_normalization(conv3, training=training)
-                # conv3 = tf.layers.max_pooling2d(conv3,pool_size=2,strides=2)
-                # conv4 = tf.layers.conv2d(conv3, filters=64, kernel_size=3, strides=1, padding='valid')
-                # if self.batch_norm:
-                #     conv4 = tf.layers.batch_normalization(conv4, training=training)
-                # conv4 = tf.layers.max_pooling2d(conv4,pool_size=2,strides=2)
-                # conv5 = tf.layers.conv2d(conv4, filters=64, kernel_size=3, strides=1, padding='valid')
-                # if self.batch_norm:
-                #     conv5 = tf.layers.batch_normalization(conv5, training=training)
-                # conv5 = tf.layers.max_pooling2d(conv5,pool_size=2,strides=2)
+            with tf.variable_scope('Parameters'):
 
-                fc = tf.reshape(coded_unet,shape=[self.batch_size,-1])
-                fc = tf.layers.dense(fc,1024,activation=tf.nn.relu)
-                if self.batch_norm:
-                    fc = tf.layers.batch_normalization(fc,training=training)
-                fc = tf.layers.dense(fc,512,activation=tf.nn.relu)
-                if self.batch_norm:
-                    fc = tf.layers.batch_normalization(fc,training=training)
-                par = tf.layers.dense(fc,2,activation=None)
+                fc = tf.layers.conv2d(conv3,1,3,strides=2,padding='valid',activation=tf.nn.relu)
+                fc = tf.layers.conv2d(fc,1,3,strides=2,padding='valid',activation=tf.nn.relu)
+                fc = tf.reshape(fc,shape=[self.batch_size,-1])
+                # fc = tf.layers.dense(fc, units=512,activation=tf.nn.relu)
+                par = tf.layers.dense(fc,units=64,activation=tf.nn.relu)
+                par = tf.layers.dense(par,units=2,activation=tf.sigmoid)
 
+            with tf.variable_scope("PD"):
 
-            with tf.variable_scope("PD", reuse=reuse):
-
-                lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
-                # lda = 1.9*tf.nn.sigmoid(tf.reshape(par[:,0],[self.batch_size,1,1,1])) + 0.1
-                # alpha = 1.9*tf.nn.sigmoid(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1])) + 0.1
-
+                lda = 4.9*tf.reshape(par[:,0],[self.batch_size,1,1,1]) + 0.1
+                alpha = 4.9*tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1]) + 0.1
+                # lda = tf.reshape(par[:,0],[self.batch_size,1,1,1]) + 0.1
+                # alpha = tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1]) + 0.1
+                # lda = tf.clip_by_value(tf.reshape(par[:,0],[self.batch_size,1,1,1]) ,clip_value_min=0.1,clip_value_max=1.0)
+                # alpha = tf.clip_by_value(tf.reshape(par[:, 1], [self.batch_size, 1, 1, 1]) ,clip_value_min=0.1,clip_value_max=1.5)
+                sigma = 1.
                 f = u
 
+                # u, td, tp= PD(self, NitOut=1, NitIn=[1], u=u, delta=delta, alpha=alpha, lda=lda)
+                u, td, tp= PD(self, NitOut=4, NitIn=[40,20,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
 
-                u, td, tp, sigma = PD(self, NitOut=4, NitIn=[40,20,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
-                # u, td, tp, sigma = PD(self, NitOut=4, NitIn=[10,10,10,10], u=u, delta=delta, alpha=alpha, lda=lda)
-                # u, td, tp, sigma = PD(self, NitOut=10, NitIn=[30,25,20,15,10,10,10,10,10,5], u=u, delta=delta, alpha=alpha, lda=lda)
 
-                self.batch_size = self.batch_size_org
-
-            if self.pre_train:
-                u =pre_delta
-
-            return u, td, tp, lda, alpha, delta, sigma, f
+            return u, td, tp, lda, alpha, delta, sigma, f, th
 
     def train(self):
         is_random = tf.placeholder(dtype=tf.bool,name='is_random')
 
         train_images = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
         validation_images = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
-        # test_images = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
-        test_images = tf.placeholder(dtype=tf.float32,shape=[1, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
+        test_images = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
 
         train_gt = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
         validation_gt = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
-        # test_gt = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
-        test_gt = tf.placeholder(dtype=tf.float32,shape=[1, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
+        test_gt = tf.placeholder(dtype=tf.float32,shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
 
         train_pack = tf.concat([train_images,train_gt],axis=-1)
         train_pack = tf.cond(is_random,lambda:tf.image.rot90(train_pack), lambda: train_pack)
@@ -581,73 +560,50 @@ class PDNN:
         train_images_da = tf.expand_dims(train_pack[:,:,:,0],-1)
         train_gt_da = tf.expand_dims(train_pack[:,:,:,1],-1)
 
-        u_train, td, tp, lda, alpha, delta, sigma, f = self.PD_v2(train_images_da, reuse=False, training = True, batch_size=self.batch_size)
-        u_validation, _, _, _, _, delta_v, _, _= self.PD_v2(validation_images, reuse=True, training= False, batch_size=self.batch_size)
-        u_test, _, _, _, _, delta_t, _, _= self.PD_v2(test_images, reuse=True, training= False, batch_size= 1)
-
+        u_train, td, tp, lda, alpha, delta, sigma, f, th = self.PD_v2(train_images_da,  training = True)
+        u_validation, _, _, _, _, delta_v, _, _, th_v= self.PD_v2(validation_images, reuse=True, training= False)
+        u_test, _, _, _, _, _, _, _, _= self.PD_v2(test_images, reuse=True, training= False)
 
         with tf.variable_scope('Regularization'):
-            TV2D = tf.reduce_mean(self.TV2D(delta))
+            TV2D = tf.reduce_mean(self.TV2D(th))
 
-        # with tf.name_scope('Bayesian_Weights'):
-        #     s1 = tf.Variable(tf.sqrt(0.5),name='s1')
-        #     s2 = tf.Variable(0.1,name='s2')
-        #
-        #     c1 = tf.div(1.,2.*(tf.square(s1)),name='c1')
-        #     c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
+        with tf.name_scope('Bayesian_Weights'):
+            s1 = tf.Variable(tf.sqrt(0.5),name='s1')
+            s2 = tf.Variable(0.1,name='s2')
 
+            c1 = tf.div(1.,2.*(tf.square(s1)),name='c1')
+            c2 = tf.div(1.,2.*(tf.square(s2)),name='c2')
 
-
-        if self.pre_train:
-            # train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=u_train)
-            train_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1)))
-            u_train = tf.cast(1-tf.expand_dims(tf.argmax(u_train,axis=-1),-1),tf.float32)
-            # validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=u_validation)
-            validation_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1)))
-            u_validation = tf.expand_dims(1-tf.cast(tf.argmax(u_validation,axis=-1),tf.float32),-1)
-            # u_train = tf.expand_dims(u_train[:,:,:,0],axis=-1)
-            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
-            # u_validation = tf.expand_dims(u_validation[:,:,:,0],axis=-1)
-            # validation_loss =  1.-dice_coe(output=u_validation,target=validation_gt)
-
-        else:
-            # train_loss =  tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
-            # validation_loss =  tf.losses.mean_squared_error(labels=validation_gt,predictions=u_validation)
-            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
-            # validation_loss =  1.-dice_coe(output=u_validation,target=validation_gt)
+        # train_gt_flat = tf.reshape(train_gt,[self.batch_size,-1])
+        # u_train_flat = tf.reshape(u_train,[self.batch_size,-1])
+        # train_gt_flat = tf.concat([train_gt_flat,1.0-train_gt_flat],axis=-1)
+        # u_train_flat = tf.concat([u_train_flat,1.0-u_train_flat],axis=-1)
+        #train_loss = tf.losses.softmax_cross_entropy(onehot_labels=train_gt_flat,logits=u_train_flat)
+        # loss_l2 = tf.losses.mean_squared_error(labels=train_gt,predictions=u_train)
+        # u_train = delta
+        loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
+        U2 = tf.reduce_mean(tf.square(delta))
+        train_loss =  c1*tf.reduce_mean(1.-dice_coe(output=u_train,target=train_gt_da)) + s1 + 0.001*U2
+        # train_loss = c1*loss_l2 + s1 + 0.001*U2
+        # u_train = tf.maximum(0.0, tf.minimum(1., u_train))
 
 
-            # train_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1))
-            # validation_loss =  tf.losses.softmax_cross_entropy(onehot_labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1))
-
-            train_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([train_gt_da,1.-train_gt_da],axis=-1),logits=tf.concat([u_train,1.-u_train],axis=-1)))
-            validation_loss =  tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.concat([validation_gt,1.-validation_gt],axis=-1),logits=tf.concat([u_validation,1.-u_validation],axis=-1)))
-        U2 = tf.reduce_mean(tf.pow(tf.square(delta),2.0))
-        # train_loss += self.tv_loss*U2
-
-
-            # loss_l2 = tf.losses.mean_squared_error(labels=train_gt_da,predictions=u_train)
-            # u_train = 1-tf.expand_dims(u_train[:,:,:,0],axis=-1)
-            # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da)
-            # # train_loss =  1.-dice_coe(output=u_train,target=train_gt_da, loss_type='sorensen')
-            # # train_loss = loss_l2
-            # u_validation = 1-tf.expand_dims(u_validation[:,:,:,0],axis=-1)
-            # validation_loss = 1.-dice_coe(output=u_validation,target=validation_gt)
+        # validation_loss = tf.losses.mean_squared_error(labels=validation_gt,predictions=u_validation)
+        # u_validation = tf.maximum(0.0, tf.minimum(1., u_validation))
+        validation_loss = 1.-dice_coe(output=u_validation,target=validation_gt)
 
         test_loss = 1.-dice_coe(output=u_test,target=test_gt)
 
-        global_step = tf.Variable(0, trainable=False, name='global_step')
-
+        global_step = tf.Variable(0, trainable=False)
         var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        saver = tf.train.Saver(var_list=tf.global_variables())
 
-        optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=self.show_gradients)
+        optimizer = optimizer_opt(self,loss=train_loss,var_list=var_list,global_step=global_step,show_gradients=True)
 
-
+        saver = tf.train.Saver()
 
         with tf.name_scope('All_Metrics'):
-            dice_coe_t = dice_coe(output=u_train,target=train_gt_da)
-            iou_coe_t = iou_coe(output=u_train,target=train_gt_da)
+            dice_coe_t = dice_coe(output=u_train,target=train_gt)
+            iou_coe_t = iou_coe(output=u_train,target=train_gt)
 
             dice_coe_v = dice_coe(output=u_validation,target=validation_gt)
             iou_coe_v = iou_coe(output=u_validation,target=validation_gt)
@@ -659,9 +615,9 @@ class PDNN:
         random_slice = tf.placeholder(dtype=tf.int32)
 
         with tf.name_scope('Training'):
-            # with tf.name_scope('Bayesian_weights'):
-            #     tf.summary.scalar('c1',c1)
-            #     # tf.summary.scalar('c2',c2)
+            with tf.name_scope('Bayesian_weights'):
+                tf.summary.scalar('c1',c1)
+                # tf.summary.scalar('c2',c2)
 
             with tf.name_scope('Metrics'):
                 tf.summary.scalar('Dice_coe',dice_coe_t)
@@ -679,14 +635,12 @@ class PDNN:
                 tf.summary.image('GT', sum_mask)
 
                 tf.summary.image('delta', delta)
+                tf.summary.image('th', th)
 
             with tf.name_scope('Losses'):
                 tf.summary.scalar('Loss',train_loss)
                 tf.summary.scalar('TV2D_Reg',TV2D)
-                # tf.summary.scalar('U2_Reg',U2)
-            with tf.name_scope('Bounds'):
-                tf.summary.scalar('Max_Delta', tf.reduce_max(delta))
-                tf.summary.scalar('Min_Delta', tf.reduce_min(delta))
+                tf.summary.scalar('U2_Reg',U2)
 
             with tf.name_scope('Parameters'):
                 tf.summary.scalar('tp', tp)
@@ -716,8 +670,9 @@ class PDNN:
                 gtv = tf.summary.image('GT', sum_mask)
 
                 delv = tf.summary.image('delta', delta_v)
+                thv = tf.summary.image('th', th_v)
 
-        summary_validation = tf.summary.merge(inputs=[vl, iv, dv, outv, gtv, inv, delv])
+        summary_validation = tf.summary.merge(inputs=[vl, iv, dv, outv, gtv, inv, delv, thv])
 
         with tf.name_scope('Test'):
             dice_test = tf.placeholder(dtype=tf.float32)
@@ -760,9 +715,9 @@ class PDNN:
                     data_train = self.load_data_train(data_path=self.data_dir, list=t_f)
                     data_valid = self.load_data_valid(data_path=self.data_dir, list=v_f)
 
-                if not((counter % (self.epoch_iteration))==0):
-                # if not((counter % (50))==0):
+                if not((counter % (self.epoch_iteration/10))==0):
                     ti, tm = next(data_train)
+
                     _= sess.run([optimizer],feed_dict={train_images: ti, train_gt: tm, is_random: np.random.randint(0,2)})
                 else:
 
@@ -781,13 +736,11 @@ class PDNN:
                 if (counter % self.epoch_iteration)==0 and not(counter==0):
                     epocas = epocas + 1
                     saver.save(sess, self.checkpoint)
-
                     np.save('counter.npy',counter)
                     np.save('epocas.npy',epocas)
 
                 if self.is_test:
-                    # print(counter)
-                    if (counter % (self.test_each_epoch*self.epoch_iteration))==0 and not(counter==0):
+                    if (counter % (self.test_each_epoch*self.epoch_iteration))==0: # and not(counter==0):
                         dice_test_list = []
                         iou_test_list = []
                         test_list = np.load('./test_list.npy')
@@ -797,17 +750,16 @@ class PDNN:
                         for subject in tqdm(list_flair):
                             # vol_value = []
                             # vol_gt = []
-                            # print ('un volumen')
+                            print ('un volumen')
                             for test_iter in range(155):
-                                test_i = np.load(self.data_dir+'validation'+str(subject, 'utf-8') +str(test_iter)+'.npy')
+                                test_i = np.load(self.data_dir+'validation'+subject+str(test_iter)+'.npy')
                                 test_i = np.reshape(test_i,newshape=[1,self.IM_ROWS,self.IM_COLS,1])
-                                test_m = np.load(self.data_dir+'validation'+'/gt'+str(subject, 'utf-8')[3:]+str(test_iter)+'.npy')
+                                test_m = np.load(self.data_dir+'validation'+'/gt'+subject[3:]+str(test_iter)+'.npy')
                                 test_m = np.reshape(test_m,newshape=[1,self.IM_ROWS,self.IM_COLS,1])
 
                                 slice_value = sess.run([u_test],
                                     feed_dict={test_images: test_i, test_gt: test_m}, options=run_options, run_metadata=run_metadata)
-                                if self.pre_train:
-                                    slice_value = np.expand_dims(np.argmax(slice_value[0],axis=-1),-1)
+
                                 if test_iter == 0:
                                     vol_value = slice_value
                                     vol_gt = test_m
@@ -817,17 +769,13 @@ class PDNN:
 
                                 # vol_value.append(slice_value[0][0,:,:,:])
                                 # vol_gt.append(test_m[0,:,:,:])
-                            vol_value = vol_value >= 0.5
+
                             vol_value = np.reshape(vol_value,[self.IM_ROWS,self.IM_COLS,155])
                             vol_gt = np.reshape(vol_gt,[self.IM_ROWS,self.IM_COLS,155])
                             dice_coe_test_value = self.np_dice(vol_value,vol_gt)
                             iou_coe_test_value = self.np_iou(vol_value,vol_gt)
                             dice_test_list.append(dice_coe_test_value)
                             iou_test_list.append(iou_coe_test_value)
-
-                        plt.bar(np.arange(len(dice_test_list)), np.asarray(dice_test_list, dtype=np.float32))
-                        plt.title('Test DICE Avg: ' + str(np.mean(dice_test_list)))
-                        plt.savefig('test.png', bbox_inches='tight')
 
                         summary_str_test, global_step_value = sess.run([summary_test, global_step],feed_dict={dice_test: np.mean(dice_test_list), iou_test: np.mean(iou_test_list)})
                         summary_writer_test.add_run_metadata(run_metadata, 'step%d' % epocas)
@@ -838,18 +786,21 @@ class PDNN:
             sess.close()
 
     def test(self):
-
         self.batch_size = 1
-        self.restore = True
         test_images = tf.placeholder(dtype=tf.float32,
                                      shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
 
         test_gt = tf.placeholder(dtype=tf.float32,
                                  shape=[self.batch_size, self.IM_ROWS, self.IM_COLS, self.IM_DEPTH])
 
-        u_test,td, tp, lda, alpha, delta, sigma, f = self.PD_v2(u=test_images, reuse=tf.AUTO_REUSE, training=False, batch_size=self.batch_size)
+        u_test, _, _, _, _, _, _, _, _ = self.PD_v2(test_images, reuse=tf.AUTO_REUSE, training=False)
 
         saver = tf.train.Saver()
+
+        with tf.name_scope('All_Metrics'):
+
+            dice_coe_test = dice_coe(output=u_test,target=test_gt)
+            iou_coe_test = iou_coe(output=u_test,target=test_gt)
 
         with tf.Session() as sess:
 
@@ -858,42 +809,27 @@ class PDNN:
             if self.restore:
                 saver.restore(sess, self.checkpoint)
 
+            t_f, v_f = self.create_list(data_path=self.data_dir)
+            data_test = self.load_data_valid(data_path=self.data_dir, list=v_f)
+
+
             dice_test_list = []
             iou_test_list = []
-            test_list = np.load('./test_list.npy')
-            num_images = len(test_list[0])
-            list_flair = test_list[0]
-            list_gt = test_list[1]
-            for subject in tqdm(list_flair):
+            for test_iter in tqdm(range(self.num_test_samples)):
+                test_i, test_m = next(data_test)
 
-                for test_iter in range(155):
-                    test_i = np.load(self.data_dir + 'validation' + str(subject, 'utf-8') + str(test_iter) + '.npy')
-                    test_i = np.reshape(test_i, newshape=[1, self.IM_ROWS, self.IM_COLS, 1])
-                    test_m = np.load(
-                        self.data_dir + 'validation' + '/gt' + str(subject, 'utf-8')[3:] + str(test_iter) + '.npy')
-                    test_m = np.reshape(test_m, newshape=[1, self.IM_ROWS, self.IM_COLS, 1])
-
-                    slice_value = sess.run([u_test],
-                                           feed_dict={test_images: test_i, test_gt: test_m})
-                    if self.pre_train:
-                        slice_value = 1-np.expand_dims(np.argmax(slice_value[0], axis=-1), -1)
-                    if test_iter == 0:
-                        vol_value = slice_value
-                        vol_gt = test_m
-                    else:
-                        vol_value = np.concatenate([vol_value, slice_value], axis=-1)
-                        vol_gt = np.concatenate([vol_gt, test_m], axis=-1)
-
-                vol_value = vol_value>=0.5
-                vol_value = np.reshape(vol_value, [self.IM_ROWS, self.IM_COLS, 155])
-                vol_gt = np.reshape(vol_gt, [self.IM_ROWS, self.IM_COLS, 155])
-                dice_coe_test_value = self.np_dice(vol_value, vol_gt)
-                iou_coe_test_value = self.np_iou(vol_value, vol_gt)
+                dice_coe_test_value, iou_coe_test_value,  = sess.run([dice_coe_test, iou_coe_test],feed_dict={test_images: test_i, test_gt: test_m})
                 dice_test_list.append(dice_coe_test_value)
                 iou_test_list.append(iou_coe_test_value)
 
-            plt.bar(np.arange(len(dice_test_list)), np.asarray(dice_test_list, dtype=np.float32))
-            plt.title('Test DICE Avg: '+str(np.mean(dice_test_list)))
-            plt.savefig('test.png', bbox_inches='tight')
+            if not os.path.exists('Test'):
+                os.makedirs('Test')
 
-            print(np.mean(dice_test_list))
+            np.savez('Test/Test_'+self.model_name+'.npz', dice=dice_test_list, iou=iou_test_list, dice_avg=np.average(dice_test_list), iou_avg=np.average(iou_test_list))
+
+
+            data = np.load('Test/Test_'+self.model_name+'.npz')
+            print(data['dice'])
+            print(data['iou'])
+            print(data['dice_avg'])
+            print(data['iou_avg'])
